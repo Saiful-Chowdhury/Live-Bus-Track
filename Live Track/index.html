@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Bus Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map {
+            width: 100%;
+            height: 500px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Bus Tracker</h1>
+    <div id="map"></div>
+
+    <!-- Include Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        const socket = io(); // Socket.IO connection to the server
+
+        let currentLatitude = 51.505; // Default latitude (you can change it to your default location)
+        let currentLongitude = -0.09; // Default longitude
+        const deviceId = 'bus123'; // Unique device ID (e.g., bus ID)
+
+        // Initialize Leaflet map
+        const map = L.map('map').setView([currentLatitude, currentLongitude], 13); // Map center & zoom level
+
+        // Add OpenStreetMap tile layer to the map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(map);
+
+        // Add a marker to represent the bus (this will update later)
+        const marker = L.marker([currentLatitude, currentLongitude]).addTo(map);
+
+        // Function to watch the user's geolocation and emit it to the server
+        function watchLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(
+                    (position) => {
+                        currentLatitude = position.coords.latitude;
+                        currentLongitude = position.coords.longitude;
+
+                        // Emit location data to the server
+                        socket.emit('sendLocation', {
+                            latitude: currentLatitude,
+                            longitude: currentLongitude,
+                            deviceId: deviceId,
+                        });
+
+                        // Update the marker position on the map
+                        marker.setLatLng([currentLatitude, currentLongitude]);
+
+                        // Center the map to the new position
+                        map.setView([currentLatitude, currentLongitude], 13);
+
+                        console.log(`Location sent: Latitude ${currentLatitude}, Longitude ${currentLongitude}`);
+                    },
+                    (error) => {
+                        console.error('Error getting location:', error.message);
+                    },
+                    {
+                        enableHighAccuracy: true, // Enable high accuracy GPS
+                        maximumAge: 10000, // Cache position for up to 10 seconds
+                        timeout: 10000, // Timeout after 10 seconds if no location is available
+                    }
+                );
+            } else {
+                console.error('Geolocation is not supported by this browser.');
+            }
+        }
+
+        // Start watching the location
+        watchLocation();
+
+        // Listen for location updates from the server and update the map
+        socket.on('locationUpdate', (data) => {
+            const { latitude, longitude, deviceId } = data;
+
+            if (deviceId !== 'bus123') return; // Only update the bus with the matching device ID
+
+            // Update marker position and center the map
+            marker.setLatLng([latitude, longitude]);
+            map.setView([latitude, longitude], 13);
+
+            console.log(`Received location update from ${deviceId}: Latitude ${latitude}, Longitude ${longitude}`);
+        });
+    </script>
+</body>
+</html>
